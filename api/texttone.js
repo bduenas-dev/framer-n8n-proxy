@@ -16,8 +16,8 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Step 1: Call Render-hosted Hugging Face model
-    const modelRes = await fetch("https://texttone-api.onrender.com/texttone", {
+    // Step 1: Call Render-hosted model at /texttone
+    const modelRes = await fetch("https://sentiate-api.onrender.com/texttone", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text: userInput }),
@@ -25,7 +25,7 @@ export default async function handler(req, res) {
 
     const modelData = await modelRes.json()
 
-    // Step 2: Call OpenAI to generate rewrites
+    // Step 2: GPT Rewrites
     const gptRes = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -38,7 +38,7 @@ export default async function handler(req, res) {
           {
             role: "system",
             content:
-              "You're a helpful assistant that rewrites text in three tones: professional, casual, and confident.",
+              "You're a helpful assistant that rewrites a message three ways: one professional, one casual, one confident.",
           },
           {
             role: "user",
@@ -52,15 +52,17 @@ export default async function handler(req, res) {
     const gptData = await gptRes.json()
     const rewrites = gptData.choices?.[0]?.message?.content ?? "No rewrites"
 
-    // Step 3: Respond back to Framer
+    // Step 3: Final response to Framer
     res.setHeader("Access-Control-Allow-Origin", "*")
     return res.status(200).json({
       success: true,
       original: userInput,
       tone: {
-        label: modelData.label,
-        class: modelData.class,
+        label: modelData.tone_label,
+        score: modelData.tone_score,
         confidence: modelData.confidence,
+        percent: modelData.confidence_percent,
+        meter: modelData.display_meter,
       },
       rewrites,
     })
