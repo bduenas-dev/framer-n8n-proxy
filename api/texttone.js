@@ -10,28 +10,63 @@ export default async function handler(req, res) {
     return res.status(405).json({ message: "Method not allowed" })
   }
 
+  const { userInput } = req.body
+  if (!userInput || typeof userInput !== "string") {
+    return res.status(400).json({ message: "Missing or invalid input" })
+  }
+
   try {
-    const response = await fetch("https://quantr.app.n8n.cloud/webhook/texttone-gpt", {
+    // Step 1: Call Render-hosted Hugging Face model
+    const modelRes = await fetch("https://texttone-api.onrender.com/texttone", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(req.body),
+      body: JSON.stringify({ text: userInput }),
     })
 
-    const contentType = response.headers.get("content-type")
-    const rawText = await response.text()
+    const modelData = await modelRes.json()
 
-    if (!contentType || !contentType.includes("application/json")) {
-      throw new Error("Expected JSON but got: " + rawText.slice(0, 100))
-    }
+    // Step 2: Call OpenAI to generate rewrites
+    const gptRes = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "gpt-4o",
+        messages: [
+          {
+            role: "system",
+            content:
+              "You're a helpful assistant that rewrites text in three tones: professional, casual, and confident.",
+          },
+          {
+            role: "user",
+            content: `Rewrite this message in those three tones: "${userInput}"`,
+          },
+        ],
+        temperature: 0.7,
+      }),
+    })
 
-    const data = JSON.parse(rawText)
+    const gptData = await gptRes.json()
+    const rewrites = gptData.choices?.[0]?.message?.content ?? "No rewrites"
 
+    // Step 3: Respond back to Framer
     res.setHeader("Access-Control-Allow-Origin", "*")
-    return res.status(200).json(data)
-  } catch (error) {
-    console.error("Proxy error:", error.message)
+    return res.status(200).json({
+      success: true,
+      original: userInput,
+      tone: {
+        label: modelData.label,
+        class: modelData.class,
+        confidence: modelData.confidence,
+      },
+      rewrites,
+    })
+  } catch (err) {
+    console.error("Proxy failed:", err)
     res.setHeader("Access-Control-Allow-Origin", "*")
-    return res.status(500).json({ error: "Proxy failed", details: error.message })
+    return res.status(500).json({ error: "Backend failure", details: err.message })
   }
 }
-
