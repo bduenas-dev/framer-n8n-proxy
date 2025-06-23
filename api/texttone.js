@@ -1,6 +1,5 @@
 export default async function handler(req, res) {
   if (req.method === "OPTIONS") {
-    // 👇 Respond to the CORS preflight check
     res.setHeader("Access-Control-Allow-Origin", "*")
     res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS")
     res.setHeader("Access-Control-Allow-Headers", "Content-Type")
@@ -18,7 +17,14 @@ export default async function handler(req, res) {
       body: JSON.stringify(req.body),
     })
 
-    const data = await response.json()
+    const contentType = response.headers.get("content-type")
+    const rawText = await response.text()
+
+    if (!contentType || !contentType.includes("application/json")) {
+      throw new Error("Expected JSON but got: " + rawText.slice(0, 100))
+    }
+
+    const data = JSON.parse(rawText)
     res.setHeader("Access-Control-Allow-Origin", "*")
     res.status(200).json(data)
   } catch (err) {
